@@ -1,5 +1,7 @@
 # Downloaded course content files
 *.json
+*.zip
+courses/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
