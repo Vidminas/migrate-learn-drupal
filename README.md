@@ -15,6 +15,8 @@ This project contains two modes of working with Blackboard Learn: 1) using the A
 
 ### Using the Learn API
 
+! DO NOT USE ! At the moment this is not updated to integrate with the Drupal uploader. I may update this in the future, if needed.
+
 1. In the `.env` file, replace the `LEARN_BASE_URL` value with the link to your Blackboard Learn instance
 1. Create Blackboard Developer account at <https://developer.blackboard.com/>
 1. Create a new Blackboard API application and copy the application key (that's the client ID) and secret (that's the client secret) into the `.env` file
@@ -32,31 +34,45 @@ This project contains two modes of working with Blackboard Learn: 1) using the A
    1. If you would like, you can change the directory where the content will be unzipped by modifying the `COURSE_DATA_DIR` value
 1. Open `extract_learn.ipynb` and run all the cells; watch out for any errors -- if there are any, resolve them before continuing and re-run the cells. This should create a JSON file with all the course content
 
+
 ## Drupal instructions
 
-This project contains two modes of working with Drupal: 1) uploading course pages as Group nodes or 2) uploading course pages as Book nodes. At the moment 1) only works with Learn API downloaded data and 2) only works with course export file data.
+This project creates Drupal Books for course pages, which have links between each other. All the course book pages are also placed into one course group, which allows managing permissions and adding fields that apply to the whole course.
 
-### Using Drupal Group
-
-1. Install, enable, and configure the Group Drupal module (this can be quite extensive and steps are subject to change, instructions to be added if needed)
-1. In the `.env` file, replace the `DRUPAL_BASE_URL` value with the link to your Drupal instance
 1. Log in as an administrator (or ask your Drupal administrator to do the steps below)
 1. Go to 'Extend' admin tab and enable HTTP Basic Authentication and JSON:API modules
 1. Visit `${drupal_url}/admin/config/services/jsonapi` and enable JSON:API create, read, update, and delete operations
-1. Copy administrator account username and password into the `.env` file
-1. If you haven't done this already in the steps for using the Learn API above, choose a course you would like to migrate from Blackboard Learn to Drupal and copy its course ID into `.env` (if using the course archive mode, then a json file named as `<course id>.json` will be created in the directory defined by `COURSE_DATA_DIR`).
-1. Open `upload_drupal_group.ipynb` and run all the cells
-
-### Using Drupal Book
-
 1. Install, enable, and configure the [GraphQL Book](https://www.drupal.org/project/graphql_book) Drupal module (follow module documentation)
+1. Install, enable, and configure the Group Drupal module:
+   1. Go to Administration > Groups > Group types and press "+ Add group type". In the name field, enter "Course" (or, if you want to set it to something else, it's possible but you will need to update the machine names and API routes in the configuration code). Leave group settings and creator settings with defaults, but in access settings, tick "Automatically configure useful default roles", "Automatically configure an administrative role", "Automatically assign this administrative role to group creators". Save the group type
+   1. Click 'manage fields' for the new group type and "+ Add field". Set the field type to "Text (plain)" and label to "Acronym" (same rules as with group type name apply). Continue leaving the rest to default values and save the new field
+   1. Navigate to the 'content' settings for the Course group type and install the "Group node (Book page)" plugin. Set group cardinality to 1 (and the content cardinality setting should be fixed at 1 already). Do not tick the use 2-step wizard box. Confirm with the "Install plugin" button
+   1. With Drupal 10.0.9 + Group 3.1.0 module, creating group relationships fails with HTTP 500 error:
+   
+   ```
+   Drupal\\group\\Plugin\\Group\\RelationHandler\\EmptyAccessControl::relationshipCreateAccess(): Argument #1 ($group) must be of type Drupal\\group\\Entity\\GroupInterface, null given, called in drupal\\modules\\contrib\\group\\src\\Entity\\Access\\GroupRelationshipAccessControlHandler.php on line 61
+   ```
+   This is a known bug: https://www.drupal.org/project/group/issues/2872645. It can be resolved by applying patch until official fix is released. Instructions for applying patches can be found here: https://www.drupal.org/docs/develop/git/using-git-to-contribute-to-drupal/working-with-patches/applying-a-patch-in-a-feature-branch. Add to `composer.json > extra`:
+   ```
+   "patches": {
+      "drupal/group": {
+         "#2872645 - Creating Group content via JSON:API": "https://www.drupal.org/files/issues/2023-02-15/group-add-content-2872645-50.patch"
+      }
+   }
+   ```
+
+   If this fails to apply the patch for some reason, you can also download the patch to the group module directory and apply it manually using `patch -p 1 -i ${patch_filename}`
+
 1. In the `.env` file:
    1. Replace the `DRUPAL_BASE_URL` value with the link to your Drupal instance
    1. Replace the `DRUPAL_GRAPHQL_URL` value if using a different graphql endpoint
-   1. Replace the `DRUPAL_COURSE_ID` value with the course identifier (can be found from the created JSON filename)
+   1. Replace the `DRUPAL_JSONAPI_URL` value if using a different JSON:API endpoint
+   1. Replace the `DRUPAL_COURSE_ID` value with the course identifier (in the previous steps, a json file named as `<course id>.json` will be created in the directory defined by `COURSE_DATA_DIR`)
    1. Replace the `DRUPAL_COURSE_ACRONYM` value with a prefix to be used in all created page titles
-   1. Replace the `DRUPAL_USERNAME` and `DRUPAL_PASSWORD` values with account details of an account with permission to execute GraphQL requests
-1. Open `upload_drupal_book.ipynb` and run all the cells
+   1. Replace the `DRUPAL_USERNAME` and `DRUPAL_PASSWORD` values with account details of an account with permission to execute GraphQL and JSON:API requests
+
+1. Open `upload_drupal.ipynb` and run all the cells
+
 
 ## Useful commands and links
 
@@ -69,5 +85,3 @@ If using Docker Compose to run Drupal (I use <https://hub.docker.com/r/bitnami/d
 And for Docker Compose with a local Dockerfile to run additional setup commands, use `docker compose up --build --force-recreate --no-deps` to force rebuild the image, when Docker doesn't pick up on Dockerfile changes.
 
 Drupal modules can be enabled from the command line using drush: `drush pm:enable -y graphql`.
-
-TODO: Restrict GraphQL access with basic auth? https://drupal.stackexchange.com/questions/297350/how-do-i-restrict-graphql-access-with-basic-auth
